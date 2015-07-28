@@ -1,13 +1,15 @@
 #!/bin/bash
 
 # Variables initialisation
-version="renameMacFromOpenDirectory v0.3 - 2015, Yvan Godard [godardyvan@gmail.com]"
+version="renameMacFromOpenDirectory v0.4 - 2015, Yvan Godard [godardyvan@gmail.com]"
 versionOSX=$(sw_vers -productVersion | awk -F '.' '{print $(NF-1)}')
 scriptDir=$(dirname "${0}")
 scriptName=$(basename "${0}")
 help="no"
 dnUserBranch="cn=users"
 dnComputerBranch="cn=computers"
+dnGroupsComputers="cn=computer_groups"
+dnListsComputers="cn=computer_lists"
 logActive=0
 withLdapBind="no"
 addCommentToLdap=0
@@ -30,6 +32,12 @@ logTemp=$(mktemp /tmp/renameMacFromOpenDirectory_LogTemp.XXXXX)
 computerLdapEntryTemp=$(mktemp /tmp/renameMacFromOpenDirectory_computerLdapEntryTemp.XXXXX)
 computerLdapEntryContent=$(mktemp /tmp/renameMacFromOpenDirectory_computerLdapEntryContent.XXXXX)
 computerNameTemp=$(mktemp /tmp/renameMacFromOpenDirectory_computerNameTemp.XXXXX)
+userLdapList=$(mktemp /tmp/renameMacFromOpenDirectory_userLdapList.XXXXX)
+userLdapListDecoded=$(mktemp /tmp/renameMacFromOpenDirectory_userLdapListDecoded.XXXXX)
+groupsOfComputerTemp=$(mktemp /tmp/renameMacFromOpenDirectory_groupsOfComputerTemp.XXXXX)
+groupsOfComputerClean=$(mktemp /tmp/renameMacFromOpenDirectory_groupsOfComputerClean.XXXXX)
+listsOfComputerTemp=$(mktemp /tmp/renameMacFromOpenDirectory_listsOfComputerTemp.XXXXX)
+listsOfComputerClean=$(mktemp /tmp/renameMacFromOpenDirectory_listsOfComputerClean.XXXXX)
 
 help () {
 	echo -e "\n$version\n"
@@ -112,6 +120,11 @@ function base64decode () {
 	fi
 }
 
+# Fonction utilisée pour supprimer les sauts de ligne dans retours de commandes ldapsearch
+function ldapUnSplitLines () {
+	perl -n -e 'chomp ; print "\n" unless (substr($_,0,1) eq " " || !defined($lines)); $_ =~ s/^\s+// ; print $_ ; $lines++;' -i "${1}"
+}
+
 # Vérification des options/paramètres du script 
 optsCount=0
 while getopts "hs:b:m:a:p:u:d:j:o:O:w:W:v:" option
@@ -141,7 +154,6 @@ do
 		d) 	computerNamePrefix=${OPTARG}
 						;;
 		o) 	attributComputerOwner=${OPTARG}
-			
 						;;
 		O) 	attributOwnedComputer=${OPTARG}
 						;;
@@ -229,10 +241,7 @@ cnComputer=$(echo "${dnComputer}" | awk -F ",${dnComputerBranch},${ldapDnBase}" 
 
 # On stocke le contenu de l'entrée LDIF dans un fichier temporaire
 ${ldapCommandBegin} -b ${dnComputerBranch},${ldapDnBase} ${cnComputer} apple-generateduid apple-hwuuid apple-realname cn ${attributComputerOwner} > ${computerLdapEntryTemp}
-
-# Correction to support LDIF splitted lines, thanks to Guillaume Bougard (gbougard@pkg.fr)
-perl -n -e 'chomp ; print "\n" unless (substr($_,0,1) eq " " || !defined($lines)); $_ =~ s/^\s+// ; print $_ ; $lines++;' -i "${computerLdapEntryTemp}"
-# Décodage des informations
+ldapUnSplitLines "${computerLdapEntryTemp}"
 oldIfs=$IFS ; IFS=$'\n'
 for line in $(cat ${computerLdapEntryTemp})
 do
@@ -300,9 +309,7 @@ if [[ ${mode} = "fromspecs" ]] || [[ ${mode} = "fromspecswithldapupdate" ]] ; th
 			ownerLdapEntryTemp=$(mktemp /tmp/renameMacFromOpenDirectory_ownerLdapEntryTemp.XXXXX)
 			ownerLdapEntryContent=$(mktemp /tmp/renameMacFromOpenDirectory_ownerLdapEntryContent.XXXXX)
 			${ldapCommandBegin} -b ${dnUserBranch},${ldapDnBase} ${computerOwnerUID} apple-realname cn > ${ownerLdapEntryTemp}
-			# Correction to support LDIF splitted lines, thanks to Guillaume Bougard (gbougard@pkg.fr)
-			perl -n -e 'chomp ; print "\n" unless (substr($_,0,1) eq " " || !defined($lines)); $_ =~ s/^\s+// ; print $_ ; $lines++;' -i "${ownerLdapEntryTemp}"
-			# Décodage des informations
+			ldapUnSplitLines "${ownerLdapEntryTemp}"
 			oldIfs=$IFS ; IFS=$'\n'
 			for line in $(cat ${ownerLdapEntryTemp})
 			do
@@ -327,24 +334,26 @@ if [[ ${mode} = "fromspecs" ]] || [[ ${mode} = "fromspecswithldapupdate" ]] ; th
 
 elif [[ ${mode} = "fromldap" ]]; then
 	computerNewRealName=${ldapAppleRealName}
-	computerNewCn=${ldapAppleCn}
+	computerNewCn=$(echo ${ldapAppleCn} | sed 'y/áàâäçéèêëîïìôöóùúüñÂÀÄÇÉÈÊËÎÏÔÖÙÜÑ/aaaaceeeeiiiooouuunAAACEEEEIIOOUUN/')
 fi
 
 # On applique le nouveau nom à la machine
 echo ""
-if [[ $(/usr/sbin/scutil --get ComputerName) != "${computerNewRealName}" ]] ; then
-	echo "" && echo "On change le ComputerName de $(/usr/sbin/scutil --get ComputerName) par ${computerNewRealName}"
+oldComputerName=$(/usr/sbin/scutil --get ComputerName)
+if [[ "${oldComputerName}" != "${computerNewRealName}" ]] ; then
+	echo "" && echo "On change le ComputerName de ${oldComputerName} par ${computerNewRealName}"
 	/usr/sbin/scutil --set ComputerName "${computerNewRealName}"
 	[[ $? -ne 0 ]] && error 11 "Problème lors de l'application de 'ComputerName ${computerNewRealName}'"
 else
-	echo "" && echo "Pas de nécessiter de changer le ComputerName, déjà correct : ${computerNewRealName}"
+	echo "" && echo "Pas de nécessité de changer le ComputerName, déjà correct : ${computerNewRealName}"
 fi
-if [[ $(/usr/sbin/scutil --get LocalHostName) != "${computerNewCn}" ]] ; then
-	echo "On change le LocalHostName de $(/usr/sbin/scutil --get LocalHostName) par ${computerNewCn}"
+oldComputerLocalHostName=$(/usr/sbin/scutil --get LocalHostName)
+if [[ "${oldComputerLocalHostName}" != "${computerNewCn}" ]] ; then
+	echo "On change le LocalHostName de ${oldComputerLocalHostName} par ${computerNewCn}"
 	/usr/sbin/scutil --set LocalHostName "${computerNewCn}"
 	[[ $? -ne 0 ]] && error 11 "Problème lors de l'application de 'LocalHostName ${computerNewCn}'"
 else
-	echo "" && echo "Pas de nécessiter de changer le LocalHostName, déjà correct : ${computerNewCn}"
+	echo "" && echo "Pas de nécessité de changer le LocalHostName, déjà correct : ${computerNewCn}"
 fi
 
 # Actualisation les entrées dans le LDAP si besoin
@@ -374,14 +383,77 @@ if [[ ${mode} = "fromspecswithldapupdate" ]]; then
 		[[ $? -ne 0 ]] && error 10 "Problème lors de la modification de l'attribut 'apple-realname: ${computerNewRealName}' de l'entrée '${dnComputer}' !"
 		rm -R ${computerModifyLdapEntry}
 	fi
+
+	# Ménage pour renommer dans le LDAP les entrées ordinateurs qui ont changé de nom à l'intérieur de groupe(s) 
+	# Liste des groupe dont l'ordinateur est membre
+	${ldapCommandBegin} -b ${dnGroupsComputers},${ldapDnBase} dn >> ${groupsOfComputerTemp}
+	ldapUnSplitLines "${groupsOfComputerTemp}"
+	oldIfs=$IFS ; IFS=$'\n'
+	for groupDn in $(cat ${groupsOfComputerTemp})
+	do
+		base64decode ${groupDn} | grep ^dn: | perl -p -e 's/dn: //g' | grep -v ^${dnGroupsComputers},${ldapDnBase} >> ${groupsOfComputerClean}
+	done
+	IFS=$oldIfs
+	# Pour chaque groupe
+	if [[ ! -z $(cat ${groupsOfComputerClean}) ]]; then
+		for computerGroup in $(cat ${groupsOfComputerClean})
+		do
+			${ldapCommandBegin} -b ${computerGroup} memberUid | grep ${oldComputerLocalHostName} > /dev/null 2>&1
+			# Si le nom ancien existe et qu'il y a un nouveau nom > changement dans le Ldap
+			if [[ $? -eq 0 ]] && [[ "${oldComputerLocalHostName}" != "${computerNewCn}" ]]; then
+				groupModifyLdapEntry=/tmp/renameMacFromOpenDirectory_groupModifyLdapEntry.ldif
+				[[ -e ${groupModifyLdapEntry} ]] && rm -R ${groupModifyLdapEntry}
+				echo "dn: ${computerGroup}" > ${groupModifyLdapEntry}
+				echo "changetype: modify" >> ${groupModifyLdapEntry}
+				echo "delete: memberUid" >> ${groupModifyLdapEntry}
+				echo "memberUid: ${oldComputerLocalHostName}" >> ${groupModifyLdapEntry}
+				echo "-" >> ${groupModifyLdapEntry}
+				echo "add: memberUid" >> ${groupModifyLdapEntry}
+				echo "memberUid: ${computerNewCn}" >> ${groupModifyLdapEntry}
+				ldapmodify -H ${ldapUrl} -D uid=${ldapAdminUid},${dnUserBranch},${ldapDnBase} -w ${ldapAdminPass} -x -f ${groupModifyLdapEntry}
+				[[ $? -ne 0 ]] && error 10 "Problème lors de la modification de l'attribut 'memberUid: ${oldComputerLocalHostName}' vers 'memberUid: ${computerNewCn}' de l'entrée '${computerGroup}' !"
+				rm -R ${groupModifyLdapEntry}
+			fi
+		done
+	fi
+
+	# Ménage pour renommer dans le LDAP les entrées ordinateurs qui ont changé de nom à l'intérieur de liste(s) 
+	# Liste des listes dont l'ordinateur est membre
+	${ldapCommandBegin} -b ${dnListsComputers},${ldapDnBase} dn >> ${listsOfComputerTemp}
+	ldapUnSplitLines "${listsOfComputerTemp}"
+	oldIfs=$IFS ; IFS=$'\n'
+	for listDn in $(cat ${listsOfComputerTemp})
+	do
+		base64decode ${listDn} | grep ^dn: | perl -p -e 's/dn: //g' | grep -v ^${dnListsComputers},${ldapDnBase} >> ${listsOfComputerClean}
+	done
+	IFS=$oldIfs
+	# Pour chaque liste
+	if [[ ! -z $(cat ${listsOfComputerClean}) ]]; then
+		for computerList in $(cat ${listsOfComputerClean})
+		do
+			${ldapCommandBegin} -b ${computerList} apple-computers | grep ${oldComputerLocalHostName} > /dev/null 2>&1
+			# Si le nom ancien existe et qu'il y a un nouveau nom > changement dans le Ldap
+			if [[ $? -eq 0 ]] && [[ "${oldComputerLocalHostName}" != "${computerNewCn}" ]]; then
+				listModifyLdapEntry=/tmp/renameMacFromOpenDirectory_listModifyLdapEntry.ldif
+				[[ -e ${listModifyLdapEntry} ]] && rm -R ${listModifyLdapEntry}
+				echo "dn: ${computerList}" > ${listModifyLdapEntry}
+				echo "changetype: modify" >> ${listModifyLdapEntry}
+				echo "delete: apple-computers" >> ${listModifyLdapEntry}
+				echo "apple-computers: ${oldComputerLocalHostName}" >> ${listModifyLdapEntry}
+				echo "-" >> ${listModifyLdapEntry}
+				echo "add: apple-computers" >> ${listModifyLdapEntry}
+				echo "apple-computers: ${computerNewCn}" >> ${listModifyLdapEntry}
+				ldapmodify -H ${ldapUrl} -D uid=${ldapAdminUid},${dnUserBranch},${ldapDnBase} -w ${ldapAdminPass} -x -f ${listModifyLdapEntry}
+				[[ $? -ne 0 ]] && error 10 "Problème lors de la modification de l'attribut 'apple-computers: ${oldComputerLocalHostName}' vers 'apple-computers: ${computerNewCn}' de l'entrée '${computerList}' !"
+				rm -R ${listModifyLdapEntry}
+			fi
+		done
+	fi
+
 	# Ménage pour supprimer les entrées que ne correspondent à aucun ordinateur
-	userLdapList=$(mktemp /tmp/renameMacFromOpenDirectory_userLdapList.XXXXX)
-	userLdapListDecoded=$(mktemp /tmp/renameMacFromOpenDirectory_userLdapListDecoded.XXXXX)
 	# On génère une liste de tous les utilisateurs
 	${ldapCommandBegin} -b ${dnUserBranch},${ldapDnBase} dn >> ${userLdapList}
-	# Correction to support LDIF splitted lines, thanks to Guillaume Bougard (gbougard@pkg.fr)
-	perl -n -e 'chomp ; print "\n" unless (substr($_,0,1) eq " " || !defined($lines)); $_ =~ s/^\s+// ; print $_ ; $lines++;' -i "${userLdapList}"
-	# Décodage des informations
+	ldapUnSplitLines "${userLdapList}"
 	oldIfs=$IFS ; IFS=$'\n'
 	sed '/^$/d' ${userLdapList} | grep uid >> ${userLdapList}.new
 	for lineuid in $(cat ${userLdapList}.new)
@@ -396,9 +468,7 @@ if [[ ${mode} = "fromspecswithldapupdate" ]]; then
 		[[ -e ${userLdapListWithComputer} ]] && rm -R ${userLdapListWithComputer}
 		[[ -e ${userLdapListWithComputerDecoded} ]] && rm -R ${userLdapListWithComputerDecoded}
 		${ldapCommandBegin} -b ${user} ${attributOwnedComputer} >> ${userLdapListWithComputer}
-		# Correction to support LDIF splitted lines, thanks to Guillaume Bougard (gbougard@pkg.fr)
-		perl -n -e 'chomp ; print "\n" unless (substr($_,0,1) eq " " || !defined($lines)); $_ =~ s/^\s+// ; print $_ ; $lines++;' -i "${userLdapListWithComputer}"
-		# Décodage des informations
+		ldapUnSplitLines "${userLdapListWithComputer}"
 		oldIfs=$IFS ; IFS=$'\n'
 		for ligne in $(cat ${userLdapListWithComputer})
 		do
@@ -438,9 +508,7 @@ if [[ ${syncAttributes} = "1" ]] ; then
 			oldOwnersTemp=$(mktemp /tmp/renameMacFromOpenDirectory_oldOwnersTemp.XXXXX)
 			oldOwnersTemp2=$(mktemp /tmp/renameMacFromOpenDirectory_oldOwnersTemp2.XXXXX)
 			${ldapCommandBegin} -b ${dnUserBranch},${ldapDnBase} ${attributOwnedComputer}=${dnComputer} uid > ${oldOwnersTemp}
-			# Correction to support LDIF splitted lines, thanks to Guillaume Bougard (gbougard@pkg.fr)
-			perl -n -e 'chomp ; print "\n" unless (substr($_,0,1) eq " " || !defined($lines)); $_ =~ s/^\s+// ; print $_ ; $lines++;' -i "${oldOwnersTemp}"
-			# Décodage des informations
+			ldapUnSplitLines "${oldOwnersTemp}"
 			oldIfs=$IFS ; IFS=$'\n'
 			for line in $(cat ${oldOwnersTemp})
 			do
@@ -529,9 +597,7 @@ if [[ ${addCommentToLdap} = "1" ]]; then
 
 	# On récupère le contenu actuel du champ commentaire
 	${ldapCommandBegin} -b ${dnComputerBranch},${ldapDnBase} ${cnComputer} ${attributComment} > ${commentLdapOriginal}
-	# Correction to support LDIF splitted lines, thanks to Guillaume Bougard (gbougard@pkg.fr)
-	perl -n -e 'chomp ; print "\n" unless (substr($_,0,1) eq " " || !defined($lines)); $_ =~ s/^\s+// ; print $_ ; $lines++;' -i "${commentLdapOriginal}"
-	# Décodage des informations
+	ldapUnSplitLines "${commentLdapOriginal}"
 	oldIfs=$IFS ; IFS=$'\n'
 	for line in $(cat ${commentLdapOriginal})
 	do
@@ -545,7 +611,7 @@ if [[ ${addCommentToLdap} = "1" ]]; then
 	[[ $? -eq 0 ]] && ligneDebut=$(sed -n '/########## \['"${scriptName}"'\] Start ##########/=' ${commentLdapOriginalClean})
 	grep '########### \['"${scriptName}"'\] End ###########' ${commentLdapOriginalClean} > /dev/null 2>&1
 	[[ $? -eq 0 ]] && ligneFin=$(sed -n '/########### \['"${scriptName}"'\] End ###########/=' ${commentLdapOriginalClean})
-	[[ ${ligneDebut} -ne 0 ]] && head -n $((${ligneDebut}-1)) ${commentLdapOriginalClean} >> ${commentLdapOriginalCleanBegin}
+	[[ ${ligneDebut} -gt 1 ]] && head -n $((${ligneDebut}-1)) ${commentLdapOriginalClean} >> ${commentLdapOriginalCleanBegin}
 	[[ ${ligneFin} -ne 0 ]] && tail -n $(($(sed -n '$=' ${commentLdapOriginalClean})-${ligneFin})) ${commentLdapOriginalClean} >> ${commentLdapOriginalCleanEnd}
 
 	# On exporte le nouveau commentaire
