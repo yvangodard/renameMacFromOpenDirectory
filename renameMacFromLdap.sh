@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Variables initialisation
-version="renameMacFromOpenDirectory v0.4 - 2015, Yvan Godard [godardyvan@gmail.com]"
+version="renameMacFromOpenDirectory v0.8 - 2015, Yvan Godard [godardyvan@gmail.com]"
 versionOSX=$(sw_vers -productVersion | awk -F '.' '{print $(NF-1)}')
 scriptDir=$(dirname "${0}")
 scriptName=$(basename "${0}")
@@ -38,6 +38,17 @@ groupsOfComputerTemp=$(mktemp /tmp/renameMacFromOpenDirectory_groupsOfComputerTe
 groupsOfComputerClean=$(mktemp /tmp/renameMacFromOpenDirectory_groupsOfComputerClean.XXXXX)
 listsOfComputerTemp=$(mktemp /tmp/renameMacFromOpenDirectory_listsOfComputerTemp.XXXXX)
 listsOfComputerClean=$(mktemp /tmp/renameMacFromOpenDirectory_listsOfComputerClean.XXXXX)
+# Sous-script
+scriptCheckMountainLionCompatibilityGit="https://raw.githubusercontent.com/hjuutilainen/adminscripts/master/check-mountainlion-compatibility.py"
+scriptCheckMountainLionCompatibility="check-mountainlion-compatibility.py"
+scriptCheckMavericksCompatibilityGit="https://raw.githubusercontent.com/hjuutilainen/adminscripts/master/check-mavericks-compatibility.py"
+scriptCheckMavericksCompatibility="check-mavericks-compatibility.py"
+scriptCheckYosemiteCompatibilityGit="https://raw.githubusercontent.com/hjuutilainen/adminscripts/master/check-yosemite-compatibility.py"
+scriptCheckYosemiteCompatibility="check-yosemite-compatibility.py"
+scriptCheckElCapitanCompatibilityGit="https://raw.githubusercontent.com/hjuutilainen/adminscripts/master/check-elcapitan-compatibility.py"
+scriptCheckElCapitanCompatibility="check-elcapitan-compatibility.py"
+scriptCheckForMalwareGit="https://raw.githubusercontent.com/hjuutilainen/adminscripts/master/check-for-osx-malware.sh"
+scriptCheckForMalware="check-for-osx-malware.sh"
 
 help () {
 	echo -e "\n$version\n"
@@ -224,7 +235,7 @@ ${ldapCommandBegin} -b ${dnComputerBranch},${ldapDnBase} > /dev/null 2>&1
 
 # Si LDAP joignable
 # On récupère l'UUID Hardware du Mac (pour vérifier ensuite une concordance dans l'OpenDirectory)
-hwuuid=$(/usr/sbin/system_profiler SPHardwareDataType | grep Hardware\ UUID: | awk -F "Hardware UUID: " '{print $2}')
+hwuuid=$(/usr/sbin/system_profiler SPHardwareDataType 2> /dev/null | grep Hardware\ UUID: | awk -F "Hardware UUID: " '{print $2}')
 echo "${hwuuid}" | grep '^[A-Z0-9]*-[A-Z0-9]*-[A-Z0-9]*-[A-Z0-9]*-[A-Z0-9]' > /dev/null 2>&1
 [[ $? -ne 0 ]] && error 2 "L'UUID Hardware semble inccorect. Nous quittons."
 [[ ! -z ${hwuuid} ]] && echo "- hwuuid : ${hwuuid}"
@@ -251,7 +262,7 @@ IFS=$oldIfs
 
 # Récupération des données (pour partie depuis les specs de la machine, pour partie depuis le LDAP)
 nomModele=$(ioreg -l | grep "product-name" | cut -d ""="" -f 2 | sed -e s/[^[:alnum:]]//g | sed s/[0-9]//g)
-modelMac=$(/usr/sbin/system_profiler SPHardwareDataType | perl -MLWP::Simple -MXML::Simple -lane '$c=substr($F[3],8)if/Serial/}{print XMLin(get(q{http://support-sp.apple.com/sp/product?cc=}.$c))->{configCode}')
+modelMac=$(/usr/sbin/system_profiler SPHardwareDataType 2> /dev/null | perl -MLWP::Simple -MXML::Simple -lane '$c=substr($F[3],8)if/Serial/}{print XMLin(get(q{http://support-sp.apple.com/sp/product?cc=}.$c))->{configCode}')
 [[ ! -z ${modelMac} ]] && echo "- model : ${modelMac}"
 
 # Récupération des données (pour partie depuis le LDAP)
@@ -330,11 +341,11 @@ if [[ ${mode} = "fromspecs" ]] || [[ ${mode} = "fromspecswithldapupdate" ]] ; th
 	[[ ! -z ${computerOwnerCN} ]] && echo "--${computerOwnerCN}" >> ${computerNameTemp}
 	[[ -z ${attributComputerOwner} ]] || [[ -z ${computerOwner} ]] && echo "-${serialNumber}" >> ${computerNameTemp}
 	computerNewRealName=$(cat ${computerNameTemp} | perl -p -e 's/\n//g')
-	computerNewCn=$(echo ${computerNewRealName} | perl -p -e 's/ /-/g')
+	computerNewCn=$(echo ${computerNewRealName} | perl -p -e 's/ /-/g' | sed 'y/àâçéèêëîïôöùüÂÀÇÉÈÊËÎÏÔÖÙÜÑ/aaceeeeiioouuAACEEEEIIOOUUN/')
 
 elif [[ ${mode} = "fromldap" ]]; then
 	computerNewRealName=${ldapAppleRealName}
-	computerNewCn=$(echo ${ldapAppleCn} | sed 'y/áàâäçéèêëîïìôöóùúüñÂÀÄÇÉÈÊËÎÏÔÖÙÜÑ/aaaaceeeeiiiooouuunAAACEEEEIIOOUUN/')
+	computerNewCn=$(echo ${ldapAppleCn} | sed 'y/àâçéèêëîïôöùüÂÀÇÉÈÊËÎÏÔÖÙÜÑ/aaceeeeiioouuAACEEEEIIOOUUN/')
 fi
 
 # On applique le nouveau nom à la machine
@@ -552,6 +563,23 @@ if [[ ${addCommentToLdap} = "1" ]]; then
 	commentLdapNew=$(mktemp /tmp/renameMacFromOpenDirectory_commentLdapNew.XXXXX)
 	commentLdapAdd=/tmp/renameMacFromOpenDirectory_add.ldif
 
+	# On installe les sous-scripts s'ils ne le sont pas 
+	[[ -e ${scriptDir%/}/${scriptCheckMountainLionCompatibility} ]] && rm ${scriptDir%/}/${scriptCheckMountainLionCompatibility}
+	curl --insecure ${scriptCheckMountainLionCompatibilityGit} -o ${scriptDir%/}/${scriptCheckMountainLionCompatibility}
+	chmod +x ${scriptDir%/}/${scriptCheckMountainLionCompatibility}
+	[[ -e ${scriptDir%/}/${scriptCheckMavericksCompatibility} ]] && rm ${scriptDir%/}/${scriptCheckMavericksCompatibility}
+	curl --insecure ${scriptCheckMavericksCompatibilityGit} -o ${scriptDir%/}/${scriptCheckMavericksCompatibility}
+	chmod +x ${scriptDir%/}/${scriptCheckMavericksCompatibility}
+	[[ -e ${scriptDir%/}/${scriptCheckYosemiteCompatibility} ]] && rm ${scriptDir%/}/${scriptCheckYosemiteCompatibility}
+	curl --insecure ${scriptCheckYosemiteCompatibilityGit} -o ${scriptDir%/}/${scriptCheckYosemiteCompatibility}
+	chmod +x ${scriptDir%/}/${scriptCheckYosemiteCompatibility}
+	[[ -e ${scriptDir%/}/${scriptCheckElCapitanCompatibility} ]] && rm ${scriptDir%/}/${scriptCheckElCapitanCompatibility}
+	curl --insecure ${scriptCheckElCapitanCompatibilityGit} -o ${scriptDir%/}/${scriptCheckElCapitanCompatibility}
+	chmod +x ${scriptDir%/}/${scriptCheckElCapitanCompatibility}
+	[[ -e ${scriptDir%/}/${scriptCheckForMalware} ]] && rm ${scriptDir%/}/${scriptCheckForMalware}
+	curl --insecure ${scriptCheckForMalwareGit} -o ${scriptDir%/}/${scriptCheckForMalware}
+	chmod +x ${scriptDir%/}/${scriptCheckForMalware}
+
 	# On prépare les données qui vont être intégrées en commentaire
 	curl -s http://support-sp.apple.com/sp/product?cc=`ioreg -l | grep "IOPlatformSerialNumber" | cut -d ""="" -f 2 | sed -e s/[^[:alnum:]]//g | cut -c 9-` > /dev/null 2>&1
 	if [[ $? -eq 0 ]]; then
@@ -559,12 +587,12 @@ if [[ ${addCommentToLdap} = "1" ]]; then
 	else
 		error 9 "Problème de connexion internet lors de la connexion à la base de données Apple.\nMerci de vérifier votre connectivité internet avant de relancer !"
 	fi
-	processorName=$(/usr/sbin/system_profiler SPHardwareDataType | grep "Processor Name:" | cut -d "":"" -f 2 | perl -p -e 's/^ //g')
-	processorSpeed=$(/usr/sbin/system_profiler SPHardwareDataType | grep "Processor Speed:" | cut -d "":"" -f 2 | perl -p -e 's/^ //g')
-	processorNumber=$(/usr/sbin/system_profiler SPHardwareDataType | grep "Number of Processors:" | cut -d "":"" -f 2 | perl -p -e 's/^ //g')
-	processorCores=$(/usr/sbin/system_profiler SPHardwareDataType | grep "Total Number of Cores:" | cut -d "":"" -f 2 | perl -p -e 's/^ //g')
-	memory=$(/usr/sbin/system_profiler SPHardwareDataType | grep "Memory:" | cut -d "":"" -f 2 | perl -p -e 's/^ //g')
-	serialNumber=$(/usr/sbin/system_profiler SPHardwareDataType | grep "Serial Number (system):" | cut -d "":"" -f 2 | perl -p -e 's/^ //g')
+	processorName=$(/usr/sbin/system_profiler SPHardwareDataType 2> /dev/null | grep "Processor Name:" | cut -d "":"" -f 2 | perl -p -e 's/^ //g')
+	processorSpeed=$(/usr/sbin/system_profiler SPHardwareDataType 2> /dev/null | grep "Processor Speed:" | cut -d "":"" -f 2 | perl -p -e 's/^ //g')
+	processorNumber=$(/usr/sbin/system_profiler SPHardwareDataType 2> /dev/null | grep "Number of Processors:" | cut -d "":"" -f 2 | perl -p -e 's/^ //g')
+	processorCores=$(/usr/sbin/system_profiler SPHardwareDataType 2> /dev/null | grep "Total Number of Cores:" | cut -d "":"" -f 2 | perl -p -e 's/^ //g')
+	memory=$(/usr/sbin/system_profiler SPHardwareDataType 2> /dev/null | grep "Memory:" | cut -d "":"" -f 2 | perl -p -e 's/^ //g')
+	serialNumber=$(/usr/sbin/system_profiler SPHardwareDataType 2> /dev/null | grep "Serial Number (system):" | cut -d "":"" -f 2 | perl -p -e 's/^ //g')
 
 	# Alimentation du fichier LDIF
 	echo "########## [${scriptName}] Start ##########" > ${commentLdapTemp}
@@ -591,8 +619,37 @@ if [[ ${addCommentToLdap} = "1" ]]; then
 	[[ ! -z ${computerNewRealName} ]] && echo "- ComputerName (computerNewRealName) : ${computerNewRealName}" >> ${commentLdapTemp}
 	[[ ! -z ${computerNewCn} ]] && echo "- ComputerName (computerNewCn) : ${computerNewCn}" >> ${commentLdapTemp}
 	[[ ! -z ${computerOwnerCN} ]] && echo "- ComputerOwnerCN : ${computerOwnerCN}" >> ${commentLdapTemp}
-	[[ ! -z ${computerOwnerDN} ]] && echo "- computerOwnerDN : ${computerOwnerDN}" >> ${commentLdapTemp}
+	[[ ! -z ${computerOwnerDN} ]] && echo "- ComputerOwnerDN : ${computerOwnerDN}" >> ${commentLdapTemp}
 	echo "" >> ${commentLdapTemp}
+	if [[ -e ${scriptDir%/}/${scriptCheckMountainLionCompatibility} ]] || [[ -e ${scriptDir%/}/${scriptCheckMavericksCompatibility} ]] || [[ -e ${scriptDir%/}/${scriptCheckYosemiteCompatibility} ]]; then
+		echo ">>> Compatibilité OS" >> ${commentLdapTemp}
+		oldIfs=$IFS ; IFS=$'\n'
+		if [[ -e ${scriptDir%/}/${scriptCheckMountainLionCompatibility} ]]; then
+			echo "- check-mountainlion-compatibility :" >> ${commentLdapTemp}
+			for line in $(${scriptDir%/}/${scriptCheckMountainLionCompatibility} | tr -s ' '); do echo -e "\t${line}" >> ${commentLdapTemp}; done
+		fi
+		if [[ -e ${scriptDir%/}/${scriptCheckMavericksCompatibility} ]]; then
+			echo "- check-mavericks-compatibility :" >> ${commentLdapTemp}
+			for line in $(${scriptDir%/}/${scriptCheckMavericksCompatibility} | tr -s ' '); do echo -e "\t${line}" >> ${commentLdapTemp}; done
+		fi
+		if [[ -e ${scriptDir%/}/${scriptCheckYosemiteCompatibility} ]]; then
+			echo "- check-yosemite-compatibility :" >> ${commentLdapTemp}
+			for line in $(${scriptDir%/}/${scriptCheckYosemiteCompatibility} | tr -s ' '); do echo -e "\t${line}" >> ${commentLdapTemp}; done
+		fi
+		if [[ -e ${scriptDir%/}/${scriptCheckElCapitanCompatibility} ]]; then
+			echo "- check-elcapitan-compatibility :" >> ${commentLdapTemp}
+			for line in $(${scriptDir%/}/${scriptCheckElCapitanCompatibility} | tr -s ' '); do echo -e "\t${line}" >> ${commentLdapTemp}; done
+		fi
+		IFS=$oldIfs
+		echo "" >> ${commentLdapTemp}
+	fi
+	if [[ -e ${scriptDir%/}/${scriptCheckForMalware} ]]; then
+		oldIfs=$IFS ; IFS=$'\n'
+		echo ">>> Recherche Malware avec ${scriptCheckForMalware} :" >> ${commentLdapTemp}
+		for line in $(${scriptDir%/}/${scriptCheckForMalware} | tr -s ' '); do echo -e "\t${line}" >> ${commentLdapTemp}; done
+		IFS=$oldIfs
+		echo "" >> ${commentLdapTemp}
+	fi
 	echo "########### [${scriptName}] End ###########" >> ${commentLdapTemp}
 
 	# On récupère le contenu actuel du champ commentaire
