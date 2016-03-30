@@ -123,7 +123,7 @@ function base64decode () {
 	echo ${1} | grep :: > /dev/null 2>&1
 	if [ $? -eq 0 ] 
 		then
-		value=$(echo ${1} | grep :: | awk '{print $2}' | base64 --decode )
+		value=$(echo ${1} | grep :: | awk '{print $2}' | perl -MMIME::Base64 -ne 'printf "%s\n",decode_base64($_)' )
 		attribute=$(echo ${1} | grep :: | awk '{print $1}' | awk 'sub( ".$", "" )' )
 		echo "${attribute} ${value}"
 	else
