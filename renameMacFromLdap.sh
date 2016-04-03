@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Variables initialisation
-version="renameMacFromOpenDirectory v0.8 - 2015, Yvan Godard [godardyvan@gmail.com]"
+version="renameMacFromOpenDirectory v0.9 - 2015, Yvan Godard [godardyvan@gmail.com]"
 versionOSX=$(sw_vers -productVersion | awk -F '.' '{print $(NF-1)}')
 scriptDir=$(dirname "${0}")
 scriptName=$(basename "${0}")
@@ -38,6 +38,7 @@ groupsOfComputerTemp=$(mktemp /tmp/renameMacFromOpenDirectory_groupsOfComputerTe
 groupsOfComputerClean=$(mktemp /tmp/renameMacFromOpenDirectory_groupsOfComputerClean.XXXXX)
 listsOfComputerTemp=$(mktemp /tmp/renameMacFromOpenDirectory_listsOfComputerTemp.XXXXX)
 listsOfComputerClean=$(mktemp /tmp/renameMacFromOpenDirectory_listsOfComputerClean.XXXXX)
+scriptsDirCompatibilityCheck="/usr/local/scriptsDirCompatibilityCheck"
 # Sous-script
 scriptCheckMountainLionCompatibilityGit="https://raw.githubusercontent.com/hjuutilainen/adminscripts/master/check-mountainlion-compatibility.py"
 scriptCheckMountainLionCompatibility="check-mountainlion-compatibility.py"
@@ -563,22 +564,40 @@ if [[ ${addCommentToLdap} = "1" ]]; then
 	commentLdapNew=$(mktemp /tmp/renameMacFromOpenDirectory_commentLdapNew.XXXXX)
 	commentLdapAdd=/tmp/renameMacFromOpenDirectory_add.ldif
 
-	# On installe les sous-scripts s'ils ne le sont pas 
+	# On teste les dossiers
+	if [[ ! -e ${scriptsDirCompatibilityCheck} ]]; then
+		echo "On créé le dossier ${scriptsDirCompatibilityCheck} pour y installer les scripts de test de compatibilité."
+		echo ""
+		mkdir -p ${scriptsDirCompatibilityCheck}
+		[[ $? -ne 0 ]] && error 1 "Impossible de créer le dossier ${scriptsDirCompatibilityCheck}. Nous quittons."
+	fi
+
+	# On installe les sous-scripts s'ils ne le sont pas
+	# 10.8
 	[[ -e ${scriptDir%/}/${scriptCheckMountainLionCompatibility} ]] && rm ${scriptDir%/}/${scriptCheckMountainLionCompatibility}
-	curl --insecure ${scriptCheckMountainLionCompatibilityGit} -o ${scriptDir%/}/${scriptCheckMountainLionCompatibility}
-	chmod +x ${scriptDir%/}/${scriptCheckMountainLionCompatibility}
+	[[ -e ${scriptsDirCompatibilityCheck%/}/${scriptCheckMountainLionCompatibility} ]] && rm ${scriptsDirCompatibilityCheck%/}/${scriptCheckMountainLionCompatibility}
+	curl --insecure ${scriptCheckMountainLionCompatibilityGit} -o ${scriptsDirCompatibilityCheck%/}/${scriptCheckMountainLionCompatibility}
+	chmod +x ${scriptsDirCompatibilityCheck%/}/${scriptCheckMountainLionCompatibility}
+	# 10.9
 	[[ -e ${scriptDir%/}/${scriptCheckMavericksCompatibility} ]] && rm ${scriptDir%/}/${scriptCheckMavericksCompatibility}
-	curl --insecure ${scriptCheckMavericksCompatibilityGit} -o ${scriptDir%/}/${scriptCheckMavericksCompatibility}
-	chmod +x ${scriptDir%/}/${scriptCheckMavericksCompatibility}
+	[[ -e ${scriptsDirCompatibilityCheck%/}/${scriptCheckMavericksCompatibility} ]] && rm ${scriptsDirCompatibilityCheck%/}/${scriptCheckMavericksCompatibility}
+	curl --insecure ${scriptCheckMavericksCompatibilityGit} -o ${scriptsDirCompatibilityCheck%/}/${scriptCheckMavericksCompatibility}
+	chmod +x ${scriptsDirCompatibilityCheck%/}/${scriptCheckMavericksCompatibility}
+	# 10.10
 	[[ -e ${scriptDir%/}/${scriptCheckYosemiteCompatibility} ]] && rm ${scriptDir%/}/${scriptCheckYosemiteCompatibility}
-	curl --insecure ${scriptCheckYosemiteCompatibilityGit} -o ${scriptDir%/}/${scriptCheckYosemiteCompatibility}
-	chmod +x ${scriptDir%/}/${scriptCheckYosemiteCompatibility}
+	[[ -e ${scriptsDirCompatibilityCheck%/}/${scriptCheckYosemiteCompatibility} ]] && rm ${scriptsDirCompatibilityCheck%/}/${scriptCheckYosemiteCompatibility}
+	curl --insecure ${scriptCheckYosemiteCompatibilityGit} -o ${scriptsDirCompatibilityCheck%/}/${scriptCheckYosemiteCompatibility}
+	chmod +x ${scriptsDirCompatibilityCheck%/}/${scriptCheckYosemiteCompatibility}
+	# 10.111
 	[[ -e ${scriptDir%/}/${scriptCheckElCapitanCompatibility} ]] && rm ${scriptDir%/}/${scriptCheckElCapitanCompatibility}
-	curl --insecure ${scriptCheckElCapitanCompatibilityGit} -o ${scriptDir%/}/${scriptCheckElCapitanCompatibility}
-	chmod +x ${scriptDir%/}/${scriptCheckElCapitanCompatibility}
+	[[ -e ${scriptsDirCompatibilityCheck%/}/${scriptCheckElCapitanCompatibility} ]] && rm ${scriptsDirCompatibilityCheck%/}/${scriptCheckElCapitanCompatibility}
+	curl --insecure ${scriptCheckElCapitanCompatibilityGit} -o ${scriptsDirCompatibilityCheck%/}/${scriptCheckElCapitanCompatibility}
+	chmod +x ${scriptsDirCompatibilityCheck%/}/${scriptCheckElCapitanCompatibility}
+	# Malware check
 	[[ -e ${scriptDir%/}/${scriptCheckForMalware} ]] && rm ${scriptDir%/}/${scriptCheckForMalware}
-	curl --insecure ${scriptCheckForMalwareGit} -o ${scriptDir%/}/${scriptCheckForMalware}
-	chmod +x ${scriptDir%/}/${scriptCheckForMalware}
+	[[ -e ${scriptsDirCompatibilityCheck%/}/${scriptCheckForMalware} ]] && rm ${scriptsDirCompatibilityCheck%/}/${scriptCheckForMalware}
+	curl --insecure ${scriptCheckForMalwareGit} -o ${scriptsDirCompatibilityCheck%/}/${scriptCheckForMalware}
+	chmod +x ${scriptsDirCompatibilityCheck%/}/${scriptCheckForMalware}
 
 	# On prépare les données qui vont être intégrées en commentaire
 	curl -s http://support-sp.apple.com/sp/product?cc=`ioreg -l | grep "IOPlatformSerialNumber" | cut -d ""="" -f 2 | sed -e s/[^[:alnum:]]//g | cut -c 9-` > /dev/null 2>&1
@@ -621,32 +640,32 @@ if [[ ${addCommentToLdap} = "1" ]]; then
 	[[ ! -z ${computerOwnerCN} ]] && echo "- ComputerOwnerCN : ${computerOwnerCN}" >> ${commentLdapTemp}
 	[[ ! -z ${computerOwnerDN} ]] && echo "- ComputerOwnerDN : ${computerOwnerDN}" >> ${commentLdapTemp}
 	echo "" >> ${commentLdapTemp}
-	if [[ -e ${scriptDir%/}/${scriptCheckMountainLionCompatibility} ]] || [[ -e ${scriptDir%/}/${scriptCheckMavericksCompatibility} ]] || [[ -e ${scriptDir%/}/${scriptCheckYosemiteCompatibility} ]]; then
+	if [[ -e ${scriptsDirCompatibilityCheck%/}/${scriptCheckMountainLionCompatibility} ]] || [[ -e ${scriptsDirCompatibilityCheck%/}/${scriptCheckMavericksCompatibility} ]] || [[ -e ${scriptsDirCompatibilityCheck%/}/${scriptCheckYosemiteCompatibility} ]] || [[ -e ${scriptsDirCompatibilityCheck%/}/${scriptCheckElCapitanCompatibility} ]]; then
 		echo ">>> Compatibilité OS" >> ${commentLdapTemp}
 		oldIfs=$IFS ; IFS=$'\n'
-		if [[ -e ${scriptDir%/}/${scriptCheckMountainLionCompatibility} ]]; then
+		if [[ -e ${scriptsDirCompatibilityCheck%/}/${scriptCheckMountainLionCompatibility} ]]; then
 			echo "- check-mountainlion-compatibility :" >> ${commentLdapTemp}
-			for line in $(${scriptDir%/}/${scriptCheckMountainLionCompatibility} | tr -s ' '); do echo -e "\t${line}" >> ${commentLdapTemp}; done
+			for line in $(${scriptsDirCompatibilityCheck%/}/${scriptCheckMountainLionCompatibility} | tr -s ' '); do echo -e "\t${line}" >> ${commentLdapTemp}; done
 		fi
-		if [[ -e ${scriptDir%/}/${scriptCheckMavericksCompatibility} ]]; then
+		if [[ -e ${scriptsDirCompatibilityCheck%/}/${scriptCheckMavericksCompatibility} ]]; then
 			echo "- check-mavericks-compatibility :" >> ${commentLdapTemp}
-			for line in $(${scriptDir%/}/${scriptCheckMavericksCompatibility} | tr -s ' '); do echo -e "\t${line}" >> ${commentLdapTemp}; done
+			for line in $(${scriptsDirCompatibilityCheck%/}/${scriptCheckMavericksCompatibility} | tr -s ' '); do echo -e "\t${line}" >> ${commentLdapTemp}; done
 		fi
-		if [[ -e ${scriptDir%/}/${scriptCheckYosemiteCompatibility} ]]; then
+		if [[ -e ${scriptsDirCompatibilityCheck%/}/${scriptCheckYosemiteCompatibility} ]]; then
 			echo "- check-yosemite-compatibility :" >> ${commentLdapTemp}
-			for line in $(${scriptDir%/}/${scriptCheckYosemiteCompatibility} | tr -s ' '); do echo -e "\t${line}" >> ${commentLdapTemp}; done
+			for line in $(${scriptsDirCompatibilityCheck%/}/${scriptCheckYosemiteCompatibility} | tr -s ' '); do echo -e "\t${line}" >> ${commentLdapTemp}; done
 		fi
-		if [[ -e ${scriptDir%/}/${scriptCheckElCapitanCompatibility} ]]; then
+		if [[ -e ${scriptsDirCompatibilityCheck%/}/${scriptCheckElCapitanCompatibility} ]]; then
 			echo "- check-elcapitan-compatibility :" >> ${commentLdapTemp}
-			for line in $(${scriptDir%/}/${scriptCheckElCapitanCompatibility} | tr -s ' '); do echo -e "\t${line}" >> ${commentLdapTemp}; done
+			for line in $(${scriptsDirCompatibilityCheck%/}/${scriptCheckElCapitanCompatibility} | tr -s ' '); do echo -e "\t${line}" >> ${commentLdapTemp}; done
 		fi
 		IFS=$oldIfs
 		echo "" >> ${commentLdapTemp}
 	fi
-	if [[ -e ${scriptDir%/}/${scriptCheckForMalware} ]]; then
+	if [[ -e ${scriptsDirCompatibilityCheck%/}/${scriptCheckForMalware} ]]; then
 		oldIfs=$IFS ; IFS=$'\n'
 		echo ">>> Recherche Malware avec ${scriptCheckForMalware} :" >> ${commentLdapTemp}
-		for line in $(${scriptDir%/}/${scriptCheckForMalware} | tr -s ' '); do echo -e "\t${line}" >> ${commentLdapTemp}; done
+		for line in $(${scriptsDirCompatibilityCheck%/}/${scriptCheckForMalware} | tr -s ' '); do echo -e "\t${line}" >> ${commentLdapTemp}; done
 		IFS=$oldIfs
 		echo "" >> ${commentLdapTemp}
 	fi
