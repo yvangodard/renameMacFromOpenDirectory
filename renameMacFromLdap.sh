@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Variables initialisation
-version="renameMacFromOpenDirectory v0.9 - 2015, Yvan Godard [godardyvan@gmail.com]"
+version="renameMacFromOpenDirectory v1.0 - 2015, Yvan Godard [godardyvan@gmail.com]"
 versionOSX=$(sw_vers -productVersion | awk -F '.' '{print $(NF-1)}')
 scriptDir=$(dirname "${0}")
 scriptName=$(basename "${0}")
@@ -135,6 +135,66 @@ function base64decode () {
 # Fonction utilisée pour supprimer les sauts de ligne dans retours de commandes ldapsearch
 function ldapUnSplitLines () {
 	perl -n -e 'chomp ; print "\n" unless (substr($_,0,1) eq " " || !defined($lines)); $_ =~ s/^\s+// ; print $_ ; $lines++;' -i "${1}"
+}
+
+# Fonction un peu solide utilisée pour supprimer les caratères accentués
+function sanizette () {
+	echo "${1}" | perl -CS -pe 's/\N{U+00E0}/a/g' \
+	| perl -CS -pe 's/\N{U+00E1}/a/g' \
+	| perl -CS -pe 's/\N{U+00E2}/a/g' \
+	| perl -CS -pe 's/\N{U+00E3}/a/g' \
+	| perl -CS -pe 's/\N{U+00E4}/a/g' \
+	| perl -CS -pe 's/\N{U+00E5}/a/g' \
+	| perl -CS -pe 's/\N{U+00E6}/ae/g' \
+	| perl -CS -pe 's/\N{U+00E7}/c/g' \
+	| perl -CS -pe 's/\N{U+00E8}/e/g' \
+	| perl -CS -pe 's/\N{U+00E9}/e/g' \
+	| perl -CS -pe 's/\N{U+00EA}/e/g' \
+	| perl -CS -pe 's/\N{U+00EB}/e/g' \
+	| perl -CS -pe 's/\N{U+00EC}/i/g' \
+	| perl -CS -pe 's/\N{U+00ED}/i/g' \
+	| perl -CS -pe 's/\N{U+00EE}/i/g' \
+	| perl -CS -pe 's/\N{U+00EF}/i/g' \
+	| perl -CS -pe 's/\N{U+00F1}/n/g' \
+	| perl -CS -pe 's/\N{U+00F2}/o/g' \
+	| perl -CS -pe 's/\N{U+00F3}/o/g' \
+	| perl -CS -pe 's/\N{U+00F4}/o/g' \
+	| perl -CS -pe 's/\N{U+00F5}/o/g' \
+	| perl -CS -pe 's/\N{U+00F6}/o/g' \
+	| perl -CS -pe 's/\N{U+00F8}/o/g' \
+	| perl -CS -pe 's/\N{U+00F9}/u/g' \
+	| perl -CS -pe 's/\N{U+00FA}/u/g' \
+	| perl -CS -pe 's/\N{U+00FB}/u/g' \
+	| perl -CS -pe 's/\N{U+00FC}/u/g' \
+	| perl -CS -pe 's/\N{U+0169}/u/g' \
+	| perl -CS -pe 's/\N{U+00C0}/A/g' \
+	| perl -CS -pe 's/\N{U+00C1}/A/g' \
+	| perl -CS -pe 's/\N{U+00C2}/A/g' \
+	| perl -CS -pe 's/\N{U+00C3}/A/g' \
+	| perl -CS -pe 's/\N{U+00C4}/A/g' \
+	| perl -CS -pe 's/\N{U+00C5}/A/g' \
+	| perl -CS -pe 's/\N{U+00C6}/AE/g' \
+	| perl -CS -pe 's/\N{U+00C7}/C/g' \
+	| perl -CS -pe 's/\N{U+00C8}/E/g' \
+	| perl -CS -pe 's/\N{U+00C9}/E/g' \
+	| perl -CS -pe 's/\N{U+00CA}/E/g' \
+	| perl -CS -pe 's/\N{U+00CB}/E/g' \
+	| perl -CS -pe 's/\N{U+00CC}/I/g' \
+	| perl -CS -pe 's/\N{U+00CD}/I/g' \
+	| perl -CS -pe 's/\N{U+00CE}/I/g' \
+	| perl -CS -pe 's/\N{U+00CF}/I/g' \
+	| perl -CS -pe 's/\N{U+00D1}/N/g' \
+	| perl -CS -pe 's/\N{U+00D2}/O/g' \
+	| perl -CS -pe 's/\N{U+00D3}/O/g' \
+	| perl -CS -pe 's/\N{U+00D4}/O/g' \
+	| perl -CS -pe 's/\N{U+00D5}/O/g' \
+	| perl -CS -pe 's/\N{U+00D6}/O/g' \
+	| perl -CS -pe 's/\N{U+00D8}/O/g' \
+	| perl -CS -pe 's/\N{U+00D9}/U/g' \
+	| perl -CS -pe 's/\N{U+00DA}/U/g' \
+	| perl -CS -pe 's/\N{U+00DB}/U/g' \
+	| perl -CS -pe 's/\N{U+00DC}/U/g' \
+	| perl -CS -pe 's/\N{U+0168}/U/g'
 }
 
 # Vérification des options/paramètres du script 
@@ -342,11 +402,11 @@ if [[ ${mode} = "fromspecs" ]] || [[ ${mode} = "fromspecswithldapupdate" ]] ; th
 	[[ ! -z ${computerOwnerCN} ]] && echo "--${computerOwnerCN}" >> ${computerNameTemp}
 	[[ -z ${attributComputerOwner} ]] || [[ -z ${computerOwner} ]] && echo "-${serialNumber}" >> ${computerNameTemp}
 	computerNewRealName=$(cat ${computerNameTemp} | perl -p -e 's/\n//g')
-	computerNewCn=$(echo ${computerNewRealName} | perl -p -e 's/ /-/g' | sed 'y/àâçéèêëîïôöùüÂÀÇÉÈÊËÎÏÔÖÙÜÑ/aaceeeeiioouuAACEEEEIIOOUUN/')
+	computerNewCn=$(sanizette $(echo ${computerNewRealName} | perl -p -e 's/ /-/g'))
 
 elif [[ ${mode} = "fromldap" ]]; then
 	computerNewRealName=${ldapAppleRealName}
-	computerNewCn=$(echo ${ldapAppleCn} | sed 'y/àâçéèêëîïôöùüÂÀÇÉÈÊËÎÏÔÖÙÜÑ/aaceeeeiioouuAACEEEEIIOOUUN/')
+	computerNewCn=$(sanizette ${ldapAppleCn})
 fi
 
 # On applique le nouveau nom à la machine
@@ -576,27 +636,27 @@ if [[ ${addCommentToLdap} = "1" ]]; then
 	# 10.8
 	[[ -e ${scriptDir%/}/${scriptCheckMountainLionCompatibility} ]] && rm ${scriptDir%/}/${scriptCheckMountainLionCompatibility}
 	[[ -e ${scriptsDirCompatibilityCheck%/}/${scriptCheckMountainLionCompatibility} ]] && rm ${scriptsDirCompatibilityCheck%/}/${scriptCheckMountainLionCompatibility}
-	curl --insecure ${scriptCheckMountainLionCompatibilityGit} -o ${scriptsDirCompatibilityCheck%/}/${scriptCheckMountainLionCompatibility}
+	curl --insecure ${scriptCheckMountainLionCompatibilityGit} --create-dirs -so ${scriptsDirCompatibilityCheck%/}/${scriptCheckMountainLionCompatibility} 
 	chmod +x ${scriptsDirCompatibilityCheck%/}/${scriptCheckMountainLionCompatibility}
 	# 10.9
 	[[ -e ${scriptDir%/}/${scriptCheckMavericksCompatibility} ]] && rm ${scriptDir%/}/${scriptCheckMavericksCompatibility}
 	[[ -e ${scriptsDirCompatibilityCheck%/}/${scriptCheckMavericksCompatibility} ]] && rm ${scriptsDirCompatibilityCheck%/}/${scriptCheckMavericksCompatibility}
-	curl --insecure ${scriptCheckMavericksCompatibilityGit} -o ${scriptsDirCompatibilityCheck%/}/${scriptCheckMavericksCompatibility}
+	curl --insecure ${scriptCheckMavericksCompatibilityGit} --create-dirs -so ${scriptsDirCompatibilityCheck%/}/${scriptCheckMavericksCompatibility}
 	chmod +x ${scriptsDirCompatibilityCheck%/}/${scriptCheckMavericksCompatibility}
 	# 10.10
 	[[ -e ${scriptDir%/}/${scriptCheckYosemiteCompatibility} ]] && rm ${scriptDir%/}/${scriptCheckYosemiteCompatibility}
 	[[ -e ${scriptsDirCompatibilityCheck%/}/${scriptCheckYosemiteCompatibility} ]] && rm ${scriptsDirCompatibilityCheck%/}/${scriptCheckYosemiteCompatibility}
-	curl --insecure ${scriptCheckYosemiteCompatibilityGit} -o ${scriptsDirCompatibilityCheck%/}/${scriptCheckYosemiteCompatibility}
+	curl --insecure ${scriptCheckYosemiteCompatibilityGit} --create-dirs -so ${scriptsDirCompatibilityCheck%/}/${scriptCheckYosemiteCompatibility}
 	chmod +x ${scriptsDirCompatibilityCheck%/}/${scriptCheckYosemiteCompatibility}
-	# 10.111
+	# 10.11
 	[[ -e ${scriptDir%/}/${scriptCheckElCapitanCompatibility} ]] && rm ${scriptDir%/}/${scriptCheckElCapitanCompatibility}
 	[[ -e ${scriptsDirCompatibilityCheck%/}/${scriptCheckElCapitanCompatibility} ]] && rm ${scriptsDirCompatibilityCheck%/}/${scriptCheckElCapitanCompatibility}
-	curl --insecure ${scriptCheckElCapitanCompatibilityGit} -o ${scriptsDirCompatibilityCheck%/}/${scriptCheckElCapitanCompatibility}
+	curl --insecure ${scriptCheckElCapitanCompatibilityGit} --create-dirs -so ${scriptsDirCompatibilityCheck%/}/${scriptCheckElCapitanCompatibility}
 	chmod +x ${scriptsDirCompatibilityCheck%/}/${scriptCheckElCapitanCompatibility}
 	# Malware check
 	[[ -e ${scriptDir%/}/${scriptCheckForMalware} ]] && rm ${scriptDir%/}/${scriptCheckForMalware}
 	[[ -e ${scriptsDirCompatibilityCheck%/}/${scriptCheckForMalware} ]] && rm ${scriptsDirCompatibilityCheck%/}/${scriptCheckForMalware}
-	curl --insecure ${scriptCheckForMalwareGit} -o ${scriptsDirCompatibilityCheck%/}/${scriptCheckForMalware}
+	curl --insecure ${scriptCheckForMalwareGit} --create-dirs -so ${scriptsDirCompatibilityCheck%/}/${scriptCheckForMalware}
 	chmod +x ${scriptsDirCompatibilityCheck%/}/${scriptCheckForMalware}
 
 	# On prépare les données qui vont être intégrées en commentaire
