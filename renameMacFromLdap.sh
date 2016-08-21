@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Variables initialisation
-version="renameMacFromOpenDirectory v1.0 - 2015, Yvan Godard [godardyvan@gmail.com]"
+version="renameMacFromOpenDirectory v1.2 - 2016, Yvan Godard [godardyvan@gmail.com]"
 versionOSX=$(sw_vers -productVersion | awk -F '.' '{print $(NF-1)}')
 scriptDir=$(dirname "${0}")
 scriptName=$(basename "${0}")
@@ -27,6 +27,7 @@ ligneDebut=0
 ligneFin=0
 verbosity=0
 syncAttributes=0
+githubRemoteScript="https://raw.githubusercontent.com/yvangodard/renameMacFromOpenDirectory/master/renameMacFromLdap.sh"
 log="/var/log/renameMacFromOpenDirectory.log"
 logTemp=$(mktemp /tmp/renameMacFromOpenDirectory_LogTemp.XXXXX)
 computerLdapEntryTemp=$(mktemp /tmp/renameMacFromOpenDirectory_computerLdapEntryTemp.XXXXX)
@@ -50,6 +51,8 @@ scriptCheckElCapitanCompatibilityGit="https://raw.githubusercontent.com/hjuutila
 scriptCheckElCapitanCompatibility="check-elcapitan-compatibility.py"
 scriptCheckForMalwareGit="https://raw.githubusercontent.com/hjuutilainen/adminscripts/master/check-for-osx-malware.sh"
 scriptCheckForMalware="check-for-osx-malware.sh"
+scriptCheckSsdGit="https://raw.githubusercontent.com/yvangodard/testSSD/master/testSSD.sh"
+scriptCheckSsd="testSSD.sh"
 
 help () {
 	echo -e "\n$version\n"
@@ -267,6 +270,36 @@ echo "****************************** `date` ******************************"
 echo "${scriptName} démarré..."
 echo "sur Mac OSX version $(sw_vers -productVersion)"
 echo ""
+
+# Check URL
+function checkUrl() {
+  command -p curl -Lsf "$1" >/dev/null
+  echo "$?"
+}
+
+# Changement du séparateur par défaut et mise à jour auto
+OLDIFS=$IFS
+IFS=$'\n'
+# Auto-update script
+if [[ $(checkUrl ${githubRemoteScript}) -eq 0 ]] && [[ $(md5 -q "$0") != $(curl -Lsf ${githubRemoteScript} | md5 -q) ]]; then
+	[[ -e "$0".old ]] && rm "$0".old
+	mv "$0" "$0".old
+	curl -Lsf ${githubRemoteScript} >> "$0"
+	echo ""
+	echo "Une mise à jour de ${0} est disponible. Nous la téléchargeons depuis GitHub."
+	if [ $? -eq 0 ]; then
+		echo "Mise à jour réussie, nous relançons le script."
+		chmod +x "$0"
+		exec ${0} "$@"
+		exit $0
+	else
+		echo "Un problème a été rencontré pour mettre à jour ${0}."
+		echo "Nous poursuivons avec l'ancienne version du script."
+	fi
+	echo ""
+fi
+IFS=$OLDIFS
+
 
 if [[ ${withLdapBind} = "no" ]] && [[ ${addCommentToLdap} = "1" ]]; then
 	echo -e "Attention : vous avez utilisé l'option '-w addcomment' sans entrer les paramètres d'accès en écriture au LDAP"
@@ -658,6 +691,10 @@ if [[ ${addCommentToLdap} = "1" ]]; then
 	[[ -e ${scriptsDirCompatibilityCheck%/}/${scriptCheckForMalware} ]] && rm ${scriptsDirCompatibilityCheck%/}/${scriptCheckForMalware}
 	curl --insecure ${scriptCheckForMalwareGit} --create-dirs -so ${scriptsDirCompatibilityCheck%/}/${scriptCheckForMalware}
 	chmod +x ${scriptsDirCompatibilityCheck%/}/${scriptCheckForMalware}
+	# SSD Check - dispose d'un auto-update, pas besoin de le réinstaller à chaque fois
+	[[ ! -e ${scriptsDirCompatibilityCheck%/}/${scriptCheckSsd} ]] \
+	&& curl --insecure ${scriptCheckSsdGit} --create-dirs -so ${scriptsDirCompatibilityCheck%/}/${scriptCheckSsd}
+	chmod +x ${scriptsDirCompatibilityCheck%/}/${scriptCheckSsd}
 
 	# On prépare les données qui vont être intégrées en commentaire
 	curl -s http://support-sp.apple.com/sp/product?cc=`ioreg -l | grep "IOPlatformSerialNumber" | cut -d ""="" -f 2 | sed -e s/[^[:alnum:]]//g | cut -c 9-` > /dev/null 2>&1
@@ -726,6 +763,13 @@ if [[ ${addCommentToLdap} = "1" ]]; then
 		oldIfs=$IFS ; IFS=$'\n'
 		echo ">>> Recherche Malware avec ${scriptCheckForMalware} :" >> ${commentLdapTemp}
 		for line in $(${scriptsDirCompatibilityCheck%/}/${scriptCheckForMalware} | tr -s ' '); do echo -e "\t${line}" >> ${commentLdapTemp}; done
+		IFS=$oldIfs
+		echo "" >> ${commentLdapTemp}
+	fi
+	if [[ -e ${scriptsDirCompatibilityCheck%/}/${scriptCheckSsd} ]]; then
+		oldIfs=$IFS ; IFS=$'\n'
+		echo ">>> Vérification SSD / TRIM avec ${scriptCheckSsd} :" >> ${commentLdapTemp}
+		for line in $(exec ${scriptsDirCompatibilityCheck%/}/${scriptCheckSsd} | tr -s ' '); do echo -e "\t${line}" >> ${commentLdapTemp}; done
 		IFS=$oldIfs
 		echo "" >> ${commentLdapTemp}
 	fi
