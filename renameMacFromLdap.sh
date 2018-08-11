@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Variables initialisation
-version="renameMacFromOpenDirectory v1.4 - 2018, Yvan Godard [godardyvan@gmail.com]"
+version="renameMacFromOpenDirectory v1.5 - 2018, Yvan Godard [godardyvan@gmail.com]"
 versionOSX=$(sw_vers -productVersion | awk -F '.' '{print $(NF-1)}')
 scriptDir=$(dirname "${0}")
 scriptName=$(basename "${0}")
@@ -15,6 +15,7 @@ withLdapBind="no"
 addCommentToLdap=0
 computerNamePrefix=""
 detailModeleRetina=0
+detailModeleTouchBar=0
 detailModeleEcran=0
 detailModeleTailleEcran=""
 computerCn=""
@@ -360,7 +361,7 @@ IFS=$oldIfs
 
 # Récupération des données (pour partie depuis les specs de la machine, pour partie depuis le LDAP)
 nomModele=$(ioreg -l | grep "product-name" | cut -d ""="" -f 2 | sed -e s/[^[:alnum:]]//g | sed s/[0-9]//g)
-#modelMac=$(/usr/sbin/system_profiler SPHardwareDataType 2> /dev/null | perl -MLWP::Simple -MXML::Simple -lane '$c=substr($F[3],8)if/Serial/}{print XMLin(get(q{http://support-sp.apple.com/sp/product?cc=}.$c))->{configCode}')
+#modelMac=$(/usr/sbin/system_profiler SPHardwareDataType 2> /dev/null | perl -MLWP::Simple -MXML::Simple -lane '$c=substr($F[3],8)if/Serial/}{print XMLin(get(q{https://support-sp.apple.com/sp/product?cc=}.$c))->{configCode}')
 modelMac=$(curl -s https://support-sp.apple.com/sp/product?cc=`/usr/sbin/system_profiler SPHardwareDataType 2> /dev/null | awk '/Serial/ {print $4}' | cut -c 9-` | sed 's|.*<configCode>\(.*\)</configCode>.*|\1|')
 [[ ! -z ${modelMac} ]] && echo "- model : ${modelMac}"
 
@@ -373,9 +374,9 @@ computerOwner=$(cat ${computerLdapEntryContent} | grep ^${attributComputerOwner}
 [[ ! -z ${computerOwner} ]] && echo "- computerOwner : ${computerOwner}"
 
 # Recherche de spécifications détaillées pour créer le nom de la machine
-curl -s http://support-sp.apple.com/sp/product?cc=`ioreg -l | grep "IOPlatformSerialNumber" | cut -d ""="" -f 2 | sed -e s/[^[:alnum:]]//g | cut -c 9-` > /dev/null 2>&1
+curl -s https://support-sp.apple.com/sp/product?cc=`ioreg -l | grep "IOPlatformSerialNumber" | cut -d ""="" -f 2 | sed -e s/[^[:alnum:]]//g | cut -c 9-` > /dev/null 2>&1
 if [[ $? -eq 0 ]]; then
-	detailModele=$(curl -s http://support-sp.apple.com/sp/product?cc=`ioreg -l | grep "IOPlatformSerialNumber" | cut -d ""="" -f 2 | sed -e s/[^[:alnum:]]//g | cut -c 9-` | sed 's|.*<configCode>\(.*\)</configCode>.*|\1|' | sed 's|.*(\(.*\)).*|\1|')
+	detailModele=$(curl -s https://support-sp.apple.com/sp/product?cc=`ioreg -l | grep "IOPlatformSerialNumber" | cut -d ""="" -f 2 | sed -e s/[^[:alnum:]]//g | cut -c 9-` | sed 's|.*<configCode>\(.*\)</configCode>.*|\1|' | sed 's|.*(\(.*\)).*|\1|')
 	echo $detailModele | grep Retina > /dev/null 2>&1
 	[[ $? -eq 0 ]] && detailModeleRetina=1
 	echo $detailModele | grep "\-inch" > /dev/null 2>&1
@@ -383,6 +384,9 @@ if [[ $? -eq 0 ]]; then
 else
 	error 9 "Problème de connexion internet lors de la connexion à la base de données Apple.\nMerci de vérifier votre connectivité internet avant de relancer !"
 fi
+# Test touch bar
+ioreg | grep "AppleEmbeddedOSSupportHost" > /dev/null 2>&1
+[[ $? -eq 0 ]] && detailModeleTouchBar=1
 
 if [[ ${mode} = "fromspecs" ]] || [[ ${mode} = "fromspecswithldapupdate" ]] ; then
 	case "$nomModele" in
@@ -437,6 +441,7 @@ if [[ ${mode} = "fromspecs" ]] || [[ ${mode} = "fromspecswithldapupdate" ]] ; th
 	echo "${nomModele}" >> ${computerNameTemp} 
 	[[ ${detailModeleEcran} -eq 1 ]] && echo "${detailModeleTailleEcran}" >> ${computerNameTemp}
 	[[ ${detailModeleRetina} -eq 1 ]] && echo "-Retina" >> ${computerNameTemp}
+	[[ ${detailModeleTouchBar} -eq 1 ]] && echo "-TouchBar" >> ${computerNameTemp}
 	[[ ! -z ${computerOwnerCN} ]] && echo "--${computerOwnerCN}" >> ${computerNameTemp}
 	[[ -z ${attributComputerOwner} ]] || [[ -z ${computerOwner} ]] && echo "-${serialNumber}" >> ${computerNameTemp}
 	computerNewRealName=$(cat ${computerNameTemp} | perl -p -e 's/\n//g')
@@ -652,6 +657,7 @@ if [[ ${syncAttributes} = "1" ]] ; then
 	fi
 fi
 
+## Ajout de l'audit / inventaire specs en commentaire sur LDAP
 if [[ ${addCommentToLdap} = "1" ]]; then
 	commentLdapTemp=$(mktemp /tmp/renameMacFromOpenDirectory_commentLdapTemp.XXXXX)
 	commentLdapOriginal=$(mktemp /tmp/renameMacFromOpenDirectory_commentLdapOriginal.XXXXX)
@@ -718,9 +724,9 @@ if [[ ${addCommentToLdap} = "1" ]]; then
 	chmod +x ${scriptsDirCompatibilityCheck%/}/${scriptCheckSsd}
 
 	# On prépare les données qui vont être intégrées en commentaire
-	curl -s http://support-sp.apple.com/sp/product?cc=`ioreg -l | grep "IOPlatformSerialNumber" | cut -d ""="" -f 2 | sed -e s/[^[:alnum:]]//g | cut -c 9-` > /dev/null 2>&1
+	curl -s https://support-sp.apple.com/sp/product?cc=`ioreg -l | grep "IOPlatformSerialNumber" | cut -d ""="" -f 2 | sed -e s/[^[:alnum:]]//g | cut -c 9-` > /dev/null 2>&1
 	if [[ $? -eq 0 ]]; then
-		modeleComplet=$(curl -s http://support-sp.apple.com/sp/product?cc=`ioreg -l | grep "IOPlatformSerialNumber" | cut -d ""="" -f 2 | sed -e s/[^[:alnum:]]//g | cut -c 9-` | sed 's|.*<configCode>\(.*\)</configCode>.*|\1|')
+		modeleComplet=$(curl -s https://support-sp.apple.com/sp/product?cc=`ioreg -l | grep "IOPlatformSerialNumber" | cut -d ""="" -f 2 | sed -e s/[^[:alnum:]]//g | cut -c 9-` | sed 's|.*<configCode>\(.*\)</configCode>.*|\1|')
 	else
 		error 9 "Problème de connexion internet lors de la connexion à la base de données Apple.\nMerci de vérifier votre connectivité internet avant de relancer !"
 	fi
