@@ -41,17 +41,19 @@ listsOfComputerTemp=$(mktemp /tmp/renameMacFromOpenDirectory_listsOfComputerTemp
 listsOfComputerClean=$(mktemp /tmp/renameMacFromOpenDirectory_listsOfComputerClean.XXXXX)
 scriptsDirCompatibilityCheck="/usr/local/scriptsDirCompatibilityCheck"
 # Sous-script
-scriptCheckMacOS10_8CompatibilityGit="https://raw.githubusercontent.com/hjuutilainen/adminscripts/master/check-10.8-mountainlion-compatibility.py"
+scriptCheckMacOS10_8CompatibilityGit="https://raw.githubusercontent.com/yvangodard/adminscripts/master/check-10.8-mountainlion-compatibility.py"
 scriptCheckMacOS10_8Compatibility="check-10.8-mountainlion-compatibility.py"
-scriptCheckMacOS10_9CompatibilityGit="https://raw.githubusercontent.com/hjuutilainen/adminscripts/master/check-10.9-mavericks-compatibility.py"
+scriptCheckMacOS10_9CompatibilityGit="https://raw.githubusercontent.com/yvangodard/adminscripts/master/check-10.9-mavericks-compatibility.py"
 scriptCheckMacOS10_9Compatibility="check-10.9-mavericks-compatibility.py"
-scriptCheckMacOS10_10CompatibilityGit="https://raw.githubusercontent.com/hjuutilainen/adminscripts/master/check-10.10-yosemite-compatibility.py"
+scriptCheckMacOS10_10CompatibilityGit="https://raw.githubusercontent.com/yvangodard/adminscripts/master/check-10.10-yosemite-compatibility.py"
 scriptCheckMacOS10_10Compatibility="check-10.10-yosemite-compatibility.py"
-scriptCheckMacOS10_11CompatibilityGit="https://raw.githubusercontent.com/hjuutilainen/adminscripts/master/check-10.11-elcapitan-compatibility.py"
+scriptCheckMacOS10_11CompatibilityGit="https://raw.githubusercontent.com/yvangodard/adminscripts/master/check-10.11-elcapitan-compatibility.py"
 scriptCheckMacOS10_11Compatibility="check-10.11-elcapitan-compatibility.py"
-scriptCheckMacOS10_12CompatibilityGit="https://raw.githubusercontent.com/hjuutilainen/adminscripts/master/check-10.12-sierra-compatibility.py"
+scriptCheckMacOS10_12CompatibilityGit="https://raw.githubusercontent.com/yvangodard/adminscripts/master/check-10.12-sierra-compatibility.py"
 scriptCheckMacOS10_12Compatibility="check-10.12-sierra-compatibility.py"
-scriptCheckForMalwareGit="https://raw.githubusercontent.com/hjuutilainen/adminscripts/master/check-for-osx-malware.sh"
+scriptCheckMacOS10_13CompatibilityGit="https://raw.githubusercontent.com/yvangodard/adminscripts/master/check-10.13-highsierra-compatibility.py"
+scriptCheckMacOS10_13Compatibility="check-10.13-highsierra-compatibility.py"
+scriptCheckForMalwareGit="https://raw.githubusercontent.com/yvangodard/adminscripts/master/check-for-osx-malware.sh"
 scriptCheckForMalware="check-for-osx-malware.sh"
 scriptCheckSsdGit="https://raw.githubusercontent.com/yvangodard/testSSD/master/testSSD.sh"
 scriptCheckSsd="testSSD.sh"
@@ -358,7 +360,8 @@ IFS=$oldIfs
 
 # Récupération des données (pour partie depuis les specs de la machine, pour partie depuis le LDAP)
 nomModele=$(ioreg -l | grep "product-name" | cut -d ""="" -f 2 | sed -e s/[^[:alnum:]]//g | sed s/[0-9]//g)
-modelMac=$(/usr/sbin/system_profiler SPHardwareDataType 2> /dev/null | perl -MLWP::Simple -MXML::Simple -lane '$c=substr($F[3],8)if/Serial/}{print XMLin(get(q{http://support-sp.apple.com/sp/product?cc=}.$c))->{configCode}')
+#modelMac=$(/usr/sbin/system_profiler SPHardwareDataType 2> /dev/null | perl -MLWP::Simple -MXML::Simple -lane '$c=substr($F[3],8)if/Serial/}{print XMLin(get(q{http://support-sp.apple.com/sp/product?cc=}.$c))->{configCode}')
+modelMac=$(curl -s https://support-sp.apple.com/sp/product?cc=`/usr/sbin/system_profiler SPHardwareDataType 2> /dev/null | awk '/Serial/ {print $4}' | cut -c 9-` | sed 's|.*<configCode>\(.*\)</configCode>.*|\1|')
 [[ ! -z ${modelMac} ]] && echo "- model : ${modelMac}"
 
 # Récupération des données (pour partie depuis le LDAP)
@@ -699,6 +702,11 @@ if [[ ${addCommentToLdap} = "1" ]]; then
 	[[ -e ${scriptsDirCompatibilityCheck%/}/${scriptCheckMacOS10_12Compatibility} ]] && rm ${scriptsDirCompatibilityCheck%/}/${scriptCheckMacOS10_12Compatibility}
 	curl --insecure ${scriptCheckMacOS10_12CompatibilityGit} --create-dirs -so ${scriptsDirCompatibilityCheck%/}/${scriptCheckMacOS10_12Compatibility}
 	chmod +x ${scriptsDirCompatibilityCheck%/}/${scriptCheckMacOS10_12Compatibility}
+	# 10.13
+	[[ -e ${scriptDir%/}/${scriptCheckMacOS10_13Compatibility} ]] && rm ${scriptDir%/}/${scriptCheckMacOS10_13Compatibility}
+	[[ -e ${scriptsDirCompatibilityCheck%/}/${scriptCheckMacOS10_13Compatibility} ]] && rm ${scriptsDirCompatibilityCheck%/}/${scriptCheckMacOS10_13Compatibility}
+	curl --insecure ${scriptCheckMacOS10_13CompatibilityGit} --create-dirs -so ${scriptsDirCompatibilityCheck%/}/${scriptCheckMacOS10_13Compatibility}
+	chmod +x ${scriptsDirCompatibilityCheck%/}/${scriptCheckMacOS10_13Compatibility}
 	# Malware check
 	[[ -e ${scriptDir%/}/${scriptCheckForMalware} ]] && rm ${scriptDir%/}/${scriptCheckForMalware}
 	[[ -e ${scriptsDirCompatibilityCheck%/}/${scriptCheckForMalware} ]] && rm ${scriptsDirCompatibilityCheck%/}/${scriptCheckForMalware}
@@ -772,6 +780,10 @@ if [[ ${addCommentToLdap} = "1" ]]; then
 		if [[ -e ${scriptsDirCompatibilityCheck%/}/${scriptCheckMacOS10_12Compatibility} ]]; then
 			echo "- check-sierra-compatibility :" >> ${commentLdapTemp}
 			for line in $(${scriptsDirCompatibilityCheck%/}/${scriptCheckMacOS10_12Compatibility} | tr -s ' '); do echo -e "\t${line}" >> ${commentLdapTemp}; done
+		fi
+		if [[ -e ${scriptsDirCompatibilityCheck%/}/${scriptCheckMacOS10_13Compatibility} ]]; then
+			echo "- check-high-sierra-compatibility :" >> ${commentLdapTemp}
+			for line in $(${scriptsDirCompatibilityCheck%/}/${scriptCheckMacOS10_13Compatibility} | tr -s ' '); do echo -e "\t${line}" >> ${commentLdapTemp}; done
 		fi
 		IFS=$oldIfs
 		echo "" >> ${commentLdapTemp}
