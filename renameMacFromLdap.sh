@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Variables initialisation
-version="renameMacFromOpenDirectory v1.5 - 2018, Yvan Godard [godardyvan@gmail.com]"
+version="renameMacFromOpenDirectory v1.6 - 2022, Yvan Godard [godardyvan@gmail.com]"
 versionOSX=$(sw_vers -productVersion | awk -F '.' '{print $(NF-1)}')
 scriptDir=$(dirname "${0}")
 scriptName=$(basename "${0}")
@@ -54,6 +54,10 @@ scriptCheckMacOS10_12CompatibilityGit="https://raw.githubusercontent.com/yvangod
 scriptCheckMacOS10_12Compatibility="check-10.12-sierra-compatibility.py"
 scriptCheckMacOS10_13CompatibilityGit="https://raw.githubusercontent.com/yvangodard/adminscripts/master/check-10.13-highsierra-compatibility.py"
 scriptCheckMacOS10_13Compatibility="check-10.13-highsierra-compatibility.py"
+scriptCheckMacOS10_14ompatibilityGit="https://raw.githubusercontent.com/yvangodard/adminscripts/master/check-10.14-mojave-compatibility.py"
+scriptCheckMacOS10_14Compatibility="check-10.14-mojave-compatibility.py"
+scriptCheckMacOS10_15CompatibilityGit="https://raw.githubusercontent.com/yvangodard/adminscripts/master/check-10.15-catalina-compatibility.py"
+scriptCheckMacOS10_15Compatibility="check-10.15-catalina-compatibility.py"
 scriptCheckForMalwareGit="https://raw.githubusercontent.com/yvangodard/adminscripts/master/check-for-osx-malware.sh"
 scriptCheckForMalware="check-for-osx-malware.sh"
 scriptCheckSsdGit="https://raw.githubusercontent.com/yvangodard/testSSD/master/testSSD.sh"
@@ -713,6 +717,16 @@ if [[ ${addCommentToLdap} = "1" ]]; then
 	[[ -e ${scriptsDirCompatibilityCheck%/}/${scriptCheckMacOS10_13Compatibility} ]] && rm ${scriptsDirCompatibilityCheck%/}/${scriptCheckMacOS10_13Compatibility}
 	curl --insecure ${scriptCheckMacOS10_13CompatibilityGit} --create-dirs -so ${scriptsDirCompatibilityCheck%/}/${scriptCheckMacOS10_13Compatibility}
 	chmod +x ${scriptsDirCompatibilityCheck%/}/${scriptCheckMacOS10_13Compatibility}
+	# 10.14
+	[[ -e ${scriptDir%/}/${scriptCheckMacOS10_14Compatibility} ]] && rm ${scriptDir%/}/${scriptCheckMacOS10_14Compatibility}
+	[[ -e ${scriptsDirCompatibilityCheck%/}/${scriptCheckMacOS10_14Compatibility} ]] && rm ${scriptsDirCompatibilityCheck%/}/${scriptCheckMacOS10_14Compatibility}
+	curl --insecure ${scriptCheckMacOS10_14CompatibilityGit} --create-dirs -so ${scriptsDirCompatibilityCheck%/}/${scriptCheckMacOS10_14Compatibility}
+	chmod +x ${scriptsDirCompatibilityCheck%/}/${scriptCheckMacOS10_14Compatibility}
+	# 10.15
+	[[ -e ${scriptDir%/}/${scriptCheckMacOS10_15Compatibility} ]] && rm ${scriptDir%/}/${scriptCheckMacOS10_15Compatibility}
+	[[ -e ${scriptsDirCompatibilityCheck%/}/${scriptCheckMacOS10_15Compatibility} ]] && rm ${scriptsDirCompatibilityCheck%/}/${scriptCheckMacOS10_15Compatibility}
+	curl --insecure ${scriptCheckMacOS10_15CompatibilityGit} --create-dirs -so ${scriptsDirCompatibilityCheck%/}/${scriptCheckMacOS10_15Compatibility}
+	chmod +x ${scriptsDirCompatibilityCheck%/}/${scriptCheckMacOS10_15Compatibility}
 	# Malware check
 	[[ -e ${scriptDir%/}/${scriptCheckForMalware} ]] && rm ${scriptDir%/}/${scriptCheckForMalware}
 	[[ -e ${scriptsDirCompatibilityCheck%/}/${scriptCheckForMalware} ]] && rm ${scriptsDirCompatibilityCheck%/}/${scriptCheckForMalware}
@@ -790,6 +804,14 @@ if [[ ${addCommentToLdap} = "1" ]]; then
 		if [[ -e ${scriptsDirCompatibilityCheck%/}/${scriptCheckMacOS10_13Compatibility} ]]; then
 			echo "- check-high-sierra-compatibility :" >> ${commentLdapTemp}
 			for line in $(${scriptsDirCompatibilityCheck%/}/${scriptCheckMacOS10_13Compatibility} | tr -s ' '); do echo -e "\t${line}" >> ${commentLdapTemp}; done
+		fi
+		if [[ -e ${scriptsDirCompatibilityCheck%/}/${scriptCheckMacOS10_14Compatibility} ]]; then
+			echo "- check-mojave-compatibility :" >> ${commentLdapTemp}
+			for line in $(${scriptsDirCompatibilityCheck%/}/${scriptCheckMacOS10_14Compatibility} | tr -s ' '); do echo -e "\t${line}" >> ${commentLdapTemp}; done
+		fi
+		if [[ -e ${scriptsDirCompatibilityCheck%/}/${scriptCheckMacOS10_15Compatibility} ]]; then
+			echo "- check-catalina-compatibility :" >> ${commentLdapTemp}
+			for line in $(${scriptsDirCompatibilityCheck%/}/${scriptCheckMacOS10_15Compatibility} | tr -s ' '); do echo -e "\t${line}" >> ${commentLdapTemp}; done
 		fi
 		IFS=$oldIfs
 		echo "" >> ${commentLdapTemp}
